@@ -1,0 +1,12 @@
+{
+    "name": "wp-gatsby",
+    "type": "wordpress-plugin",
+    "description": "Tools for working with Wordpress and GatsbyJS together.",
+    "keywords": ["gatsbyjs"],
+    "homepage": "https://www.owlmountain.co/",
+    "license": "BSD-3-Clause",
+    "require": {
+      "php": ">=5.5.0",
+      "guzzlehttp/guzzle": ">=6.3.3"
+    }
+}
