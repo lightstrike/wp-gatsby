@@ -9,13 +9,22 @@ if (! class_exists('WP_Gatsby_Admin')) {
 	class WP_Gatsby_Admin {
 
 		private static $default = array(
-      'preview' => array(
-        'activated' => 0,
-        'base' => '',
-      ),
-      'netlify' => array(
-        'auto_publish' => 0,
-        'build_hook' => '',
+			'cache' => array(
+				'wp_rest_api_cache' => false,
+			),
+			'dev_preview' => array(
+				'activated' => 0,
+				'autosave_interval' => 60,
+				'build_hook' => '',
+				'refresh_token' => '',
+			),
+			'prod_preview' => array(
+				'activated' => 0,
+				'base' => '',
+			),
+			'netlify' => array(
+				'auto_publish' => 0,
+				'build_hook' => '',
 			),
 		);
 
@@ -28,13 +37,13 @@ if (! class_exists('WP_Gatsby_Admin')) {
 				if ( apply_filters( 'gatsby_show_admin_menu', true ) ) {
 					add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 				}
-				
+
 				if ( apply_filters( 'gatsby_show_admin_bar_menu', true ) ) {
-					add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar_menu' ), 999 );				
+					add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar_menu' ), 999 );
 					add_filter('rest_cache_show_admin_bar_menu', function() {
 						return false;
 					});
-				}				
+				}
 			}
 		}
 
@@ -44,18 +53,18 @@ if (! class_exists('WP_Gatsby_Admin')) {
 				'title' => __('Publish to Gatsby', 'wp-gatsby' ),
 				'href'  => self::_publish_to_gatsby_url(),
 			);
-		
+
 			$wp_admin_bar->add_node( $args );
 		}
 
 		public static function admin_menu() {
-			add_submenu_page( 
-				'options-general.php', 
-				__( 'WP Gatsby', 'wp-gatsby' ), 
-				__( 'WP Gatsby', 'wp-gatsby' ), 
-				'manage_options', 
-				'wp-gatsby', 
-				array( __CLASS__, 'render_page' ) 
+			add_submenu_page(
+				'options-general.php',
+				__( 'WP Gatsby', 'wp-gatsby' ),
+				__( 'WP Gatsby', 'wp-gatsby' ),
+				'manage_options',
+				'wp-gatsby',
+				array( __CLASS__, 'render_page' )
 			);
 		}
 
@@ -64,8 +73,8 @@ if (! class_exists('WP_Gatsby_Admin')) {
 
 			if ( isset( $_REQUEST['gatsby_nonce'] ) && wp_verify_nonce( $_REQUEST['gatsby_nonce'], 'gatsby_options' ) ) {
 				if ( isset( $_GET['publish'] ) && 1 == $_GET['publish'] ) {
-			    $options = self::get_options();
-          $deploy_response = WP_Gatsby::trigger_netlify_deploy($options['netlify']['build_hook']);
+			    	$options = self::get_options();
+          			$deploy_response = WP_Gatsby::trigger_netlify_deploy($options['netlify']['build_hook'], $options['cache']);
 					if ( $deploy_response == 200  ) {
 						$type    = 'updated';
 						$message = __( 'A new Gatsby edition is being published. Check the site every 5 minutes.', 'wp-gatsby' );
@@ -98,10 +107,10 @@ if (! class_exists('WP_Gatsby_Admin')) {
 
 		public static function get_options( $key = null ) {
 			$options = apply_filters( 'gatsby_get_options', get_option( 'gatsby_options', self::$default ) );
-			
+
 			if ( is_string( $key ) && array_key_exists( $key, $options ) ) {
 				return $options[$key];
-			} 
+			}
 
 			return $options;
 		}

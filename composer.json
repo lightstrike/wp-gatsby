@@ -6,7 +6,6 @@
     "homepage": "https://www.owlmountain.co/",
     "license": "BSD-3-Clause",
     "require": {
-      "php": ">=5.5.0",
-      "guzzlehttp/guzzle": ">=6.3.3"
+      "php": ">=5.5.0"
     }
 }

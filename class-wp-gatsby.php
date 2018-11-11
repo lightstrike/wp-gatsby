@@ -4,13 +4,11 @@
  * Description: Tools for working with Wordpress and GatsbyJS together.
  * Author: Geoffrey Sechter
  * Author URI: http://github.com/lightstrike
- * Version: 0.1.0
+ * Version: 0.2.0
  * Plugin URI: https://github.com/lightstrike/wp-gatsby
  * License: MIT
  */
 
-use GuzzleHttp\Client;
-use WP_REST_Cache;
 use WP_Gatsby_Admin;
 
 if (! defined('ABSPATH')) {
@@ -43,7 +41,11 @@ if (! class_exists('WP_Gatsby')) {
 
 		private static function hooks() {
 			$options = get_option('gatsby_options', array() );
-			if ($options['preview']['activated'] == 1) {
+			if ($options['dev_preview']['activated'] == 1) {
+				self::add_updates_rest_api_endpoint();
+				self::set_gatsby_refresh();
+			}
+			if ($options['prod_preview']['activated'] == 1) {
 				self::add_preview_rest_api_endpoint();
 				self::set_custom_visit_site_url();
 				self::set_custom_view_url();
@@ -52,6 +54,85 @@ if (! class_exists('WP_Gatsby')) {
 			if ($options['netlify']['auto_publish'] == 1) {
 				self::set_netlify_auto_publish();
 			}
+		}
+
+		public static function add_updates_rest_api_endpoint() {
+			/**
+			* Get latest updates for all post types.
+			*
+			* @since  0.2.0
+			* @param  $request
+			* @return array content updates data
+			*/
+			function get_latest_updates( $request ) {
+				$since = esc_html( $request['since'] );
+				if ( !$since ) {
+					$since = '1 day ago';
+				}
+				$args = array(
+					'post_status' => array('inherit', 'draft', 'auto-draft'),
+					// FIXME: Enable dynamically setting this for ACF support.
+					'post_type' => array('post', 'page', 'revision'),
+					'date_query' => array(
+						array(
+							'column' => 'post_modified_gmt',
+							'after'  => $since,
+						),
+					),
+					'posts_per_page' => -1,
+					'suppress_filters' => true,
+				);
+				$query = new WP_Query( $args );
+				$posts = $query->get_posts('orderby=modified&sort_order=desc');
+				$all_updates = [];
+				foreach($posts as $post) {
+					// get parent post information
+					// FIXME: Allow dynamically setting which update fields propagate, important for ACF.
+					if ($post->post_parent) {
+						$parent = get_post($post->post_parent);
+						$parent->post_content = apply_filters( 'the_content', $post->post_content );
+						$parent->post_title = $post->post_title;
+						$parent->post_modified = $post->post_modified;
+						$parent->post_modified_gmt = $post->post_modified_gmt;
+						$post_data = $parent;
+					} else {
+						$post_data = $post;
+					}
+					array_push($all_updates, $post_data);
+				}
+
+				// Adapted from: https://stackoverflow.com/a/7872079
+				function remove_older_duplicate_posts($posts) {
+					$uniqueness = array();
+
+					foreach ($posts as $post) {
+					  if (isset($uniqueness[$post->ID])) {
+						// Skip since more recent update already found.
+						// Note this depends on the descending orderby in `get_posts` for `$query`.
+						continue;
+					  }
+					  // Remember this update as the most recent.
+					  $uniqueness[$post->ID] = $post;
+					}
+					$data = array_values($uniqueness);
+					return $data;
+				}
+
+				$latest_updates = remove_older_duplicate_posts($all_updates);
+
+				$testing = array(
+					'posts' => $posts,
+					'query' => $query->request,
+				);
+				return $latest_updates;
+			}
+
+			add_action( 'rest_api_init', function () {
+				register_rest_route( 'wp/v2', '/updates', array(
+					'methods' => 'GET',
+					'callback' => 'get_latest_updates',
+				));
+			});
 		}
 
 		public static function add_preview_rest_api_endpoint() {
@@ -143,13 +224,69 @@ if (! class_exists('WP_Gatsby')) {
 			add_filter( 'preview_page_link', 'custom_preview_link' );
     	}
 
-        public static function trigger_netlify_deploy($build_hook) {
-      		$cache = new WP_REST_Cache;
-      		$cache->empty_cache();
-      		$client = new Client();
-      		$response = $client->post($build_hook);
-      		return $response->getStatusCode();
+        public static function clear_cache($cache) {
+			if ( $cache->wp_rest_api_cache ) {
+				$cache = new WP_REST_Cache;
+				$cache->empty_cache();
+		  }
 		}
+
+		/**
+		* Trigger a Gatsby build by posting to a specified hook.
+		*
+		* @since  0.2.0
+		* @param  $build_hook
+		* @param  $args
+		* @param  $cache
+		* @return integer HTTP status code
+		*/
+        public static function trigger_build($build_hook, $args, $cache) {
+			if ( $cache ) {
+				clear_cache($cache);
+			}
+			$response = wp_remote_post($build_hook, $args);
+			if ( is_wp_error( $response ) ) {
+				$error_message = $response->get_error_message();
+				add_settings_error( 'wp-gatsby-notice', esc_attr( 'settings_updated' ), $error_message, 'error' );
+				return 500;
+			}
+			add_settings_error( 'wp-gatsby-notice', esc_attr( 'settings_updated' ), $response['headers']['code'], 'updated' );
+			return $response['headers']['code'];
+		}
+
+		/*
+		 * Clear cache if set, then post to Gatsby Refresh endpoint.
+		 */
+        public static function trigger_gatsby_refresh($build_hook, $token, $cache) {
+			$args = array (
+				'headers' => array(
+					'Authorization' => $token
+				)
+			);
+			return trigger_build($build_hook, $args, $cache);
+		}
+
+		/*
+		 * Clear cache if set, then post to Netlify build web hook.
+		 */
+        public static function trigger_netlify_deploy($build_hook, $cache) {
+			return trigger_build($build_hook, array(), $cache);
+		}
+
+		/*
+		 * See: https://wordpress.stackexchange.com/a/191008
+		 */
+		public static function set_gatsby_refresh() {
+			function gatsby_auto_refresh() {
+				$options = get_option('gatsby_options', array() );
+				WP_Gatsby::trigger_gatsby_refresh(
+					$options['dev_preview']['build_hook'],
+					$options['dev_preview']['refresh_token'],
+					$options['cache']
+				);
+			}
+			add_action( 'save_post', 'gatsby_auto_refresh' );
+    	}
 
 		/*
 		 * See: https://wordpress.stackexchange.com/a/41916
@@ -158,7 +295,10 @@ if (! class_exists('WP_Gatsby')) {
 			function netlify_auto_publish() {
 				$options = get_option('gatsby_options', array() );
 				// See, maybe a better option: https://stackoverflow.com/a/17027307
-				WP_Gatsby::trigger_netlify_deploy($options['netlify']['build_hook']);
+				WP_Gatsby::trigger_netlify_deploy(
+					$options['netlify']['build_hook'],
+					$options['cache']
+				);
 			}
 			add_action( 'save_post', 'netlify_auto_publish' );
 			// Scheduled posts support
