@@ -12,3 +12,8 @@ This plugin makes using WordPress and GatsbyJS much more seamless. Current featu
 ## Installation Instructions
 
 **TODO** Add.
+
+
+## Disclaimer
+
+Before v1.0 no promises of stability. Use at your own risk =)

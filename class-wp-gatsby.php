@@ -263,14 +263,14 @@ if (! class_exists('WP_Gatsby')) {
 					'Authorization' => $token
 				)
 			);
-			return trigger_build($build_hook, $args, $cache);
+			return WP_Gatsby::trigger_build($build_hook, $args, $cache);
 		}
 
 		/*
 		 * Clear cache if set, then post to Netlify build web hook.
 		 */
         public static function trigger_netlify_deploy($build_hook, $cache) {
-			return trigger_build($build_hook, array(), $cache);
+			return WP_Gatsby::trigger_build($build_hook, array(), $cache);
 		}
 
 		/*
