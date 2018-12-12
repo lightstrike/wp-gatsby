@@ -9,18 +9,15 @@ if (! class_exists('WP_Gatsby_Admin')) {
 	class WP_Gatsby_Admin {
 
 		private static $default = array(
+			'url' => '',
 			'cache' => array(
 				'wp_rest_api_cache' => false,
 			),
-			'dev_preview' => array(
+			'preview' => array(
 				'activated' => 0,
 				'autosave_interval' => 60,
 				'build_hook' => '',
 				'refresh_token' => '',
-			),
-			'prod_preview' => array(
-				'activated' => 0,
-				'base' => '',
 			),
 			'netlify' => array(
 				'auto_publish' => 0,
