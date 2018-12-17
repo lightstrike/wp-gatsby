@@ -4,9 +4,9 @@
     "description": "Tools for working with Wordpress and GatsbyJS together.",
     "keywords": ["gatsbyjs"],
     "homepage": "https://www.owlmountain.co/",
-    "license": "BSD-3-Clause",
+    "license": "MIT",
     "require": {
-      "php": ">=5.5.0",
-      "guzzlehttp/guzzle": ">=6.3.3"
+      "php": ">=5.6.0",
+        "squizlabs/php_codesniffer": "2.*"
     }
 }
